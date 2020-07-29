@@ -1,4 +1,4 @@
-package org.jetbrains.skiko
+package org.jetbrains.skiko.internal
 
 import java.io.File
 import java.io.IOException
@@ -7,7 +7,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 // based on https://github.com/JetBrains/skija/blob/bc6e0531021e4ff839c07196e0336d6456ed7520/src/main/java/org/jetbrains/skija/Library.java
-object Library {
+internal object Library {
     var _loaded = false
 
     // https://github.com/adamheinrich/native-utils/blob/e6a39489662846a77504634b6fafa4995ede3b1d/src/main/java/cz/adamh/utils/NativeUtils.java
