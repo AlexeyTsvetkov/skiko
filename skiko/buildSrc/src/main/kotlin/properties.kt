@@ -3,18 +3,30 @@ import java.io.File
 
 enum class OS(
     val id: String,
-    val clangFlags: Array<String>
+    val clangFlags: Array<String>,
+    val libExtension: String
 ) {
-    Linux("linux", arrayOf()),
-    Windows("windows", arrayOf()),
-    MacOS("macos", arrayOf("-mmacosx-version-min=10.13")),
-    Wasm("wasm", arrayOf()),
-    IOS("ios", arrayOf())
+    Linux("linux", arrayOf(), ".so"),
+    Windows("windows", arrayOf(), ".dll"),
+    MacOS("macos", arrayOf("-mmacosx-version-min=10.13"), ".dylib"),
+    Wasm("wasm", arrayOf(), ".wasm"),
+    IOS("ios", arrayOf(), ".a")
     ;
 
     val isWindows
         get() = this == Windows
 }
+
+fun compilerForTarget(os: OS, arch: Arch): String =
+    when (os) {
+        OS.Linux -> "g++"
+        OS.Windows -> "msvc"
+        OS.MacOS, OS.IOS -> "clang++"
+        OS.Wasm -> "emcc"
+    }
+
+fun linkerForTarget(os: OS, arch: Arch): String =
+    compilerForTarget(os, arch)
 
 enum class Arch(
     val id: String,
@@ -22,7 +34,7 @@ enum class Arch(
 ) {
     X64("x64", arrayOf("-arch", "x86_64")),
     Arm64("arm64", arrayOf("-arch", "arm64")),
-    Wasm("wasm", arrayOf("-std=c++17", "--bind", "-DSKIKO_WASM"))
+    Wasm("wasm", arrayOf())
 }
 
 enum class SkiaBuildType(
