@@ -546,6 +546,7 @@ val compileJvmBindings = tasks.register<CompileCppTask>("compileJvmBindings") {
         OS.Windows -> {
             compiler.set(project.provider { findCompiler(compilerForTarget(targetOs, targetArch)).absolutePath })
 
+            includeHeadersNonRecursive(File("C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.27.29110\\include"))
             includeHeadersNonRecursive(jdkHome.resolve("include/win32"))
             osFlags = arrayOf(
                 *buildType.msvcFlags,
