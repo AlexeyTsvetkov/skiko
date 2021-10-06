@@ -57,26 +57,20 @@ abstract class AbstractNativeToolTask : DefaultTask() {
 
     @TaskAction
     fun run(inputChanges: InputChanges) {
-        initialize()
+        beforeRun()
 
-        var failure: Exception? = null
-        try {
-            val mode = determineToolMode(inputChanges)
-            when (mode) {
-                is ToolMode.NonIncremental -> cleanStaleOutput(mode)
-                is ToolMode.Incremental -> cleanStaleOutput(mode)
-            }
-
-            val options = configureOptions(mode)
-            optionsTxtFile.writeLines(options)
-            logger.warn("Written options to $optionsTxtFile")
-
-            execute(mode, options)
-        } catch (e: Exception) {
-            failure = e
+        val mode = determineToolMode(inputChanges)
+        when (mode) {
+            is ToolMode.NonIncremental -> cleanStaleOutput(mode)
+            is ToolMode.Incremental -> cleanStaleOutput(mode)
         }
 
-        dispose(failure)
+        val options = configureOptions(mode)
+        optionsTxtFile.writeLines(options)
+        logger.warn("Written options to $optionsTxtFile")
+        execute(mode, options)
+
+        afterRun()
     }
 
     internal open fun determineToolMode(
@@ -98,14 +92,14 @@ abstract class AbstractNativeToolTask : DefaultTask() {
         cleanDirs(outDir, taskStateDir)
     }
 
-    protected fun cleanDirs(vararg dirs: Any) {
+    private fun cleanDirs(vararg dirs: Any) {
         for (dir in dirs) {
             fileOperations.delete(dir)
             fileOperations.mkdir(dir)
         }
     }
 
-    protected open fun initialize() {}
-    protected open fun dispose(failure: Exception?) {}
+    protected open fun beforeRun() {}
+    protected open fun afterRun() {}
 }
 

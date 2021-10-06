@@ -6,7 +6,6 @@ import org.gradle.api.file.FileCollection
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
-import org.gradle.api.tasks.Optional
 import org.gradle.work.ChangeType
 import org.gradle.work.Incremental
 import org.gradle.work.InputChanges
@@ -15,7 +14,6 @@ import org.gradle.workers.WorkerExecutionException
 import java.io.File
 import java.util.*
 import java.util.concurrent.Callable
-import kotlin.collections.HashMap
 import kotlin.collections.HashSet
 
 abstract class CompileCppTask : AbstractNativeToolTask() {
@@ -84,21 +82,14 @@ abstract class CompileCppTask : AbstractNativeToolTask() {
     private val sourceToOutputMappingFile: File
         get() = taskStateDir.get().asFile.resolve("source-to-output.txt")
 
-    private val compilationLogsDir: File
-        get() = taskStateDir.get().asFile.resolve("logs")
-
-    override fun initialize() {
-        super.initialize()
+    override fun beforeRun() {
         if (sourceToOutputMappingFile.exists()) {
             sourceToOutputMapping.load(sourceToOutputMappingFile)
         }
     }
 
-    override fun dispose(failure: Exception?) {
-        super.dispose(failure)
-        if (failure == null) {
-            sourceToOutputMapping.save(sourceToOutputMappingFile)
-        }
+    override fun afterRun() {
+        sourceToOutputMapping.save(sourceToOutputMappingFile)
     }
 
     override fun execute(mode: ToolMode, options: List<String>) {
@@ -113,63 +104,41 @@ abstract class CompileCppTask : AbstractNativeToolTask() {
         val outDir = outDir.get().asFile
         val compilerExecutablePath = findCompilerExecutable().absolutePath
         val workQueue = workerExecutor.noIsolation()
-        logger.warn("Compiling ${sourcesToCompile.size} files...")
-        val logFiles = prepareCompilationLogFiles(sourcesToCompile)
+        val submittedWorks = HashSet<String>()
 
         for (source in sourcesToCompile) {
             val outputFile = sourceToOutputMapping[source]
                 ?: error("Could not find output file for source file: $source")
             outputFile.parentFile.mkdirs()
+            val workId = "Compiling '${source.absolutePath}'"
+            submittedWorks.add(workId)
 
             workQueue.submit(RunExternalProcessWork::class.java) {
+                this.workId = workId
                 executable = compilerExecutablePath
                 args = options + listOf(source.absolutePath, "-o", outputFile.absolutePath)
                 workingDir = outDir
-                errLogFile = logFiles[source]!!
             }
         }
 
         try {
             workQueue.await()
         } catch (e: WorkerExecutionException) {
-            for (source in sourcesToCompile) {
-                val logFile = logFiles[source]!!
-                if (logFile.exists()) {
-                    logger.error("Could not compile '$source':")
-                    logFile.forEachLine {
-                        logger.error("  > $it")
-                    }
+            for (work in submittedWorks) {
+                val result = RunExternalProcessWork.workResults[work]
+                if (result == null) {
+                    logger.error("Error: no results for work '$work'")
+                } else if (result.failure != null) {
+                    logger.warn("\n$work:")
+                    result.log.flushTo(logger)
                 }
             }
-            throw GradleException("Some files were not compiled. Check the log for more details")
-        }
-    }
-
-    /**
-     * Generate log file names, but don't actually create log files
-     */
-    private fun prepareCompilationLogFiles(sourcesToCompile: Collection<File>): Map<File, File> {
-        val usedNames = HashSet<String>()
-        fun generateLogName(sourceFile: File): String {
-            val prefix = sourceFile.name
-            val suffix = "-log.txt"
-            val defaultCandidate = prefix + suffix
-            if (usedNames.add(defaultCandidate)) return defaultCandidate
-
-            for (i in 0..50) {
-                val candidate = "$prefix-$i$suffix"
-                if (usedNames.add(candidate)) return candidate
+            error("Some files were not compiled. Check the log for more details")
+        } finally {
+            for (work in submittedWorks) {
+                RunExternalProcessWork.workResults.remove(work)
             }
-
-            error("Could not generate log name for '$sourceFile': too many clashes")
         }
-
-        cleanDirs(compilationLogsDir)
-        val logFiles = HashMap<File, File>()
-        for (sourceFile in sourcesToCompile) {
-            logFiles[sourceFile] = compilationLogsDir.resolve(generateLogName(sourceFile))
-        }
-        return logFiles
     }
 
     private fun findCompilerExecutable(): File {
