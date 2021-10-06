@@ -535,6 +535,7 @@ val compileJvmBindings = tasks.register<CompileCppTask>("compileJvmBindings") {
         OS.Linux -> {
             includeHeadersNonRecursive(jdkHome.resolve("include/linux"))
             osFlags = arrayOf(
+                "-fPIC",
                 "-fno-rtti",
                 "-fno-exceptions",
                 "-fvisibility=hidden",
