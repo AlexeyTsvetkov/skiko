@@ -544,6 +544,8 @@ val compileJvmBindings = tasks.register<CompileCppTask>("compileJvmBindings") {
             )
         }
         OS.Windows -> {
+            compiler.set(project.provider { findCompiler(compilerForTarget(targetOs, targetArch)).absolutePath })
+
             includeHeadersNonRecursive(jdkHome.resolve("include/win32"))
             osFlags = arrayOf(
                 *buildType.msvcFlags,
@@ -634,6 +636,8 @@ val linkJvmBindings = tasks.register<LinkSharedLibraryTask>("linkJvmBindings") {
             )
         }
         OS.Windows -> {
+            linker.set(project.provider { findCompiler(linkerForTarget(targetOs, targetArch)).absolutePath })
+
             osFlags = arrayOf(
                 "Advapi32.lib",
                 "gdi32.lib",
@@ -649,6 +653,41 @@ val linkJvmBindings = tasks.register<LinkSharedLibraryTask>("linkJvmBindings") {
     }
 
     flags.set(listOf(*osFlags))
+}
+
+fun findCompiler(executableName: String): File {
+    val paths = System.getenv("PATH").split(File.pathSeparator)
+    for (path in paths) {
+        val file = File(path).resolve(executableName)
+        if (file.isFile) return file
+    }
+
+    val vsbt = System.getenv("SKIKO_VSBT_PATH")?.let(::File)
+    if (vsbt != null) {
+        val msvcDir = vsbt.resolve("VC\\Tools\\MSVC")
+        val msvcVersions = msvcDir.listFiles() ?: emptyArray()
+        if (msvcVersions.size == 1) {
+            return msvcVersions.single().resolve("bin\\Hostx64\\x64\\$executableName")
+        } else if (msvcVersions.size > 1) {
+            val skikoMsvcVersion = System.getenv("SKIKO_MSVC_VERSION")
+            if (skikoMsvcVersion == null) {
+                val msg = buildString {
+                    appendln("Multiple MSVC versions are found at VSBT installation: $vsbt")
+                    msvcVersions.forEach { appendln("* '${it.name}'") }
+                    appendln("Specify the version via 'SKIKO_MSVC_VERSION' environment variable")
+                }
+                error(msg)
+            } else {
+                val skikoMsvcVersionDir = msvcDir.resolve(skikoMsvcVersion)
+                check(skikoMsvcVersionDir.exists()) {
+                    "MSVC version '$skikoMsvcVersion' specified via 'SKIKO_MSVC_VERSION' does not exist"
+                }
+                return skikoMsvcVersionDir.resolve("bin\\Hostx64\\x64\\$executableName")
+            }
+        }
+    }
+
+    error("Could not find compiler '$executableName'")
 }
 
 // Very hacky way to compile Objective-C sources and add the

@@ -20,13 +20,13 @@ enum class OS(
 fun compilerForTarget(os: OS, arch: Arch): String =
     when (os) {
         OS.Linux -> "g++"
-        OS.Windows -> "msvc"
+        OS.Windows -> "cl.exe"
         OS.MacOS, OS.IOS -> "clang++"
         OS.Wasm -> "emcc"
     }
 
 fun linkerForTarget(os: OS, arch: Arch): String =
-    compilerForTarget(os, arch)
+    if (os.isWindows) "link.exe" else compilerForTarget(os, arch)
 
 enum class Arch(
     val id: String,
