@@ -38,8 +38,7 @@ abstract class LinkSharedLibraryTask : AbstractNativeToolTask() {
 
     override fun configureOptions(mode: ToolMode): MutableList<String> =
         super.configureOptions(mode).apply {
-            add("-o")
-            add(outDir.resolveToAbsolutePath(libOutputFileName))
+            add("/OUT:" + "\"${outDir.resolveToAbsolutePath(libOutputFileName).replace("/", "\\\\")}\"")
 
             addAll(objectFiles.files.map { it.absolutePath })
             addAll(libFiles.files.map { it.absolutePath })

@@ -52,6 +52,10 @@ val skiaZip = run {
     }.map { zipFile }
 }
 
+val windowsSdkPaths: WindowsSdkPaths by lazy {
+    findWindowsSdkPathsForCurrentOS(gradle)
+}
+
 val crossTargets = listOf(
     OS.Wasm to Arch.Wasm,
     OS.IOS to Arch.X64,
@@ -210,7 +214,9 @@ val linkWasm = tasks.register<LinkWasmTask>("linkWasm") {
     buildVariant.set(buildType)
 
     libFiles = project.fileTree(unpackedSkia)  { include("**/*.a") }
-    objectFiles = project.fileTree(compileWasm.map { it.outDir.get() }) { include("**/*.o") }
+    objectFiles = project.fileTree(compileWasm.map { it.outDir.get() }) {
+        include("**/*${targetOs.objectFileExt}")
+    }
 
     libOutputFileName.set("skiko.wasm")
     jsOutputFileName.set("skiko.js")
@@ -316,7 +322,7 @@ kotlin {
                 dependsOn(crossCompileTask)
                 val objectFilesDir = crossCompileTask.map { it.outDir.get() }
                 val objectFiles = project.fileTree(objectFilesDir) {
-                    include("**/*.o")
+                    include("**/*${targetOs.objectFileExt}")
                 }
                 inputs.files(objectFiles)
 
@@ -545,12 +551,10 @@ val compileJvmBindings = tasks.register<CompileCppTask>("compileJvmBindings") {
             )
         }
         OS.Windows -> {
-            compiler.set(project.provider { findCompiler(compilerForTarget(targetOs, targetArch)).absolutePath })
-
-            includeHeadersNonRecursive(File("C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.27.29110\\include"))
+            compiler.set(windowsSdkPaths.compiler.absolutePath)
+            includeHeadersNonRecursive(windowsSdkPaths.includeDirs)
             includeHeadersNonRecursive(jdkHome.resolve("include/win32"))
             osFlags = arrayOf(
-                "/TP",
                 "/nologo",
                 *buildType.msvcFlags,
                 "-DSK_BUILD_FOR_WIN",
@@ -588,9 +592,11 @@ val linkJvmBindings = tasks.register<LinkSharedLibraryTask>("linkJvmBindings") {
     }
 
     dependsOn(compileJvmBindings)
-    objectFiles = fileTree(compileJvmBindings.map { it.outDir.get() }) { include("**/*.o") }
+    objectFiles = fileTree(compileJvmBindings.map { it.outDir.get() }) {
+        include("**/*${targetOs.objectFileExt}")
+    }
 
-    libOutputFileName.set("libskiko-${targetOs.id}-${targetArch.id}${targetOs.libExtension}")
+    libOutputFileName.set("libskiko-${targetOs.id}-${targetArch.id}${targetOs.dynamicLibExt}")
     buildTargetOS.set(targetOs)
     buildTargetArch.set(targetArch)
     buildVariant.set(buildType)
@@ -599,7 +605,9 @@ val linkJvmBindings = tasks.register<LinkSharedLibraryTask>("linkJvmBindings") {
     when (targetOs) {
         OS.MacOS -> {
             dependsOn(project.tasks.named("objcCompile"))
-            objectFiles += fileTree("$buildDir/objc/$target") { include("**/*.o") }
+            objectFiles += fileTree("$buildDir/objc/$target") {
+                include("**/*${targetOs.objectFileExt}")
+            }
 
             osFlags = arrayOf(
                 *targetOs.clangFlags,
@@ -640,15 +648,22 @@ val linkJvmBindings = tasks.register<LinkSharedLibraryTask>("linkJvmBindings") {
             )
         }
         OS.Windows -> {
-            linker.set(project.provider { findCompiler(linkerForTarget(targetOs, targetArch)).absolutePath })
+            linker.set(windowsSdkPaths.linker.absolutePath)
 
-            osFlags = arrayOf(
+            val windowsLibs = windowsSdkPaths.findWindowsSdkLibs(
                 "Advapi32.lib",
                 "gdi32.lib",
                 "Dwmapi.lib",
                 "opengl32.lib",
                 "shcore.lib",
                 "user32.lib"
+            )
+            libFiles += project.files(windowsLibs)
+            val libDirs = windowsSdkPaths.libDirs.map { "/LIBPATH:\"${it.absolutePath.replace("/", "\\\\")}\"" }
+            osFlags = arrayOf(
+                "/NOLOGO",
+                "/DLL",
+                *libDirs.toTypedArray()
             )
         }
         OS.Wasm, OS.IOS -> {
@@ -657,41 +672,6 @@ val linkJvmBindings = tasks.register<LinkSharedLibraryTask>("linkJvmBindings") {
     }
 
     flags.set(listOf(*osFlags))
-}
-
-fun findCompiler(executableName: String): File {
-    val paths = System.getenv("PATH").split(File.pathSeparator)
-    for (path in paths) {
-        val file = File(path).resolve(executableName)
-        if (file.isFile) return file
-    }
-
-    val vsbt = System.getenv("SKIKO_VSBT_PATH")?.let(::File)
-    if (vsbt != null) {
-        val msvcDir = vsbt.resolve("VC\\Tools\\MSVC")
-        val msvcVersions = msvcDir.listFiles() ?: emptyArray()
-        if (msvcVersions.size == 1) {
-            return msvcVersions.single().resolve("bin\\Hostx64\\x64\\$executableName")
-        } else if (msvcVersions.size > 1) {
-            val skikoMsvcVersion = System.getenv("SKIKO_MSVC_VERSION")
-            if (skikoMsvcVersion == null) {
-                val msg = buildString {
-                    appendln("Multiple MSVC versions are found at VSBT installation: $vsbt")
-                    msvcVersions.forEach { appendln("* '${it.name}'") }
-                    appendln("Specify the version via 'SKIKO_MSVC_VERSION' environment variable")
-                }
-                error(msg)
-            } else {
-                val skikoMsvcVersionDir = msvcDir.resolve(skikoMsvcVersion)
-                check(skikoMsvcVersionDir.exists()) {
-                    "MSVC version '$skikoMsvcVersion' specified via 'SKIKO_MSVC_VERSION' does not exist"
-                }
-                return skikoMsvcVersionDir.resolve("bin\\Hostx64\\x64\\$executableName")
-            }
-        }
-    }
-
-    error("Could not find compiler '$executableName'")
 }
 
 // Very hacky way to compile Objective-C sources and add the
@@ -843,7 +823,7 @@ val maybeSign by project.tasks.registering {
     dependsOn(linkJvmBindings)
 
     val lib = linkJvmBindings.map { task ->
-        task.outDir.get().asFile.walk().single { file -> file.name.endsWith(targetOs.libExtension) }
+        task.outDir.get().asFile.walk().single { file -> file.name.endsWith(targetOs.dynamicLibExt) }
     }
     inputs.files(lib)
 

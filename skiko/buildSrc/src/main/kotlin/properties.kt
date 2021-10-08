@@ -3,19 +3,32 @@ import java.io.File
 
 enum class OS(
     val id: String,
-    val clangFlags: Array<String>,
-    val libExtension: String
+    val clangFlags: Array<String>
 ) {
-    Linux("linux", arrayOf(), ".so"),
-    Windows("windows", arrayOf(), ".dll"),
-    MacOS("macos", arrayOf("-mmacosx-version-min=10.13"), ".dylib"),
-    Wasm("wasm", arrayOf(), ".wasm"),
-    IOS("ios", arrayOf(), ".a")
+    Linux("linux", arrayOf()),
+    Windows("windows", arrayOf()),
+    MacOS("macos", arrayOf("-mmacosx-version-min=10.13")),
+    Wasm("wasm", arrayOf()),
+    IOS("ios", arrayOf())
     ;
 
     val isWindows
         get() = this == Windows
 }
+
+val OS.dynamicLibExt: String
+    get() = when (this) {
+        OS.Linux -> ".so"
+        OS.Windows -> ".dll"
+        OS.MacOS -> ".dylib"
+        OS.Wasm, OS.IOS -> error("Should not be called for $this")
+    }
+
+val OS.objectFileExt: String
+    get() = when (this) {
+        OS.Windows -> ".obj"
+        else -> ".o"
+    }
 
 fun compilerForTarget(os: OS, arch: Arch): String =
     when (os) {

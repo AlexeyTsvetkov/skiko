@@ -182,7 +182,7 @@ abstract class CompileCppTask : AbstractNativeToolTask() {
             sourceFiles = sourcesToCompile,
             outDir = outDir.get().asFile,
             sourceFileExt = ".cc",
-            outputFileExt = ".o"
+            outputFileExt = ".obj"
         )
         sourceToOutputMapping.putAll(mappingsForNewOrModifiedFiles)
     }

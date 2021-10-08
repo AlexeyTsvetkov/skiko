@@ -31,7 +31,6 @@ internal abstract class RunExternalProcessWork: WorkAction<RunExternalProcessWor
             failure = e
         }
 
-        println("Writing result for '${parameters.workId}'")
         workResults[parameters.workId] = WorkResult(log = log, failure = failure)
         if (failure != null)
             throw failure
