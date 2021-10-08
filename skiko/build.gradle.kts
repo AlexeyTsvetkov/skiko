@@ -550,6 +550,8 @@ val compileJvmBindings = tasks.register<CompileCppTask>("compileJvmBindings") {
             includeHeadersNonRecursive(File("C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.27.29110\\include"))
             includeHeadersNonRecursive(jdkHome.resolve("include/win32"))
             osFlags = arrayOf(
+                "/TP",
+                "/nologo",
                 *buildType.msvcFlags,
                 "-DSK_BUILD_FOR_WIN",
                 "-D_CRT_SECURE_NO_WARNINGS",

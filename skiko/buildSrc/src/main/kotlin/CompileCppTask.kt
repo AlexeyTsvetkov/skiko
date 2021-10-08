@@ -1,5 +1,4 @@
 import internal.utils.*
-import org.gradle.api.GradleException
 
 import org.gradle.api.file.Directory
 import org.gradle.api.file.FileCollection
@@ -113,10 +112,12 @@ abstract class CompileCppTask : AbstractNativeToolTask() {
             val workId = "Compiling '${source.absolutePath}'"
             submittedWorks.add(workId)
 
+            val outputObjectFileArg = if (buildTargetOS.get().isWindows) "/Fo" else "-o"
+
             workQueue.submit(RunExternalProcessWork::class.java) {
                 this.workId = workId
                 executable = compilerExecutablePath
-                args = options + listOf(source.absolutePath, "-o", outputFile.absolutePath)
+                args = options + listOf(source.escapeAbsolutePath, outputObjectFileArg, outputFile.escapeAbsolutePath)
                 workingDir = outDir
             }
         }
@@ -221,11 +222,25 @@ abstract class CompileCppTask : AbstractNativeToolTask() {
 
     override fun configureOptions(mode: ToolMode): MutableList<String> =
         super.configureOptions(mode).apply {
-            add("-c")
-            addAll(headersDirs.map { "-I${it.absolutePath}" })
+            if (buildTargetOS.get().isWindows) {
+                add("/c")
+                headersDirs.forEach {
+                    add("/I")
+                    add(it.escapeAbsolutePath)
+                }
+            } else {
+                add("-c")
+                addAll(headersDirs.map { "-I${it.escapeAbsolutePath}" })
+            }
 
             // todo: ensure that flags do not start with '-I' (all headers should be added via [headersDirs])
             addAll(flags.get())
         }
+
+    private val File.escapeAbsolutePath: String
+        get() =
+            if (buildTargetOS.get().isWindows)
+                "\"${absolutePath.replace("/", "\\\\")}\""
+            else absolutePath
 }
 

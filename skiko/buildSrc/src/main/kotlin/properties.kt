@@ -43,7 +43,7 @@ enum class SkiaBuildType(
     val clangFlags: Array<String>,
     val msvcFlags: Array<String>
 ) {
-    DEBUG("Debug", arrayOf("-DSK_DEBUG"), arrayOf("-std=c++14", "-g"), emptyArray()),
+    DEBUG("Debug", arrayOf("-DSK_DEBUG"), arrayOf("-std=c++14", "-g"), arrayOf("/Zi")),
     RELEASE("Release", arrayOf("-DNDEBUG"), arrayOf("-std=c++14", "-O3"), arrayOf("/O2"))
     ;
     override fun toString() = id
